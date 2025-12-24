@@ -1,433 +1,324 @@
-let socket;
-let currentGame = null;
-let myPlayerId = null;
-let mySecret = null;
+const socket = io();
 
-// countdown state
-let rollIntervalMs = null;
-let nextRollTimestamp = null;
-let countdownTimer = null;
+// Lobby elements
+const lobbySection = document.getElementById('lobby');
+const playerNameInput = document.getElementById('playerName');
+const gameNameInput = document.getElementById('gameName');
+const roundsSelect = document.getElementById('roundsSelect');
+const intervalSelect = document.getElementById('intervalSelect');
+const createGameBtn = document.getElementById('createGameBtn');
+const joinGameBtn = document.getElementById('joinGameBtn');
+const lobbyError = document.getElementById('lobbyError');
 
-// DOM elements
-const lobbyEl = document.getElementById("lobby");
-const gameEl = document.getElementById("game");
-const lobbyErrorEl = document.getElementById("lobbyError");
+// Game elements
+const gameSection = document.getElementById('game');
+const gameNameLabel = document.getElementById('gameNameLabel');
+const roundLabel = document.getElementById('roundLabel');
+const totalRoundsLabel = document.getElementById('totalRoundsLabel');
+const phaseLabel = document.getElementById('phaseLabel');
+const potValue = document.getElementById('potValue');
+const phaseBadge = document.getElementById('phaseBadge');
+const potCard = document.getElementById('potCard');
 
-const headerGameCodePill = document.getElementById("headerGameCodePill");
-const headerGameCodeEl = document.getElementById("headerGameCode");
+const timerLabel = document.getElementById('timerLabel');
+const rollerLabel = document.getElementById('rollerLabel');
+const playersList = document.getElementById('playersList');
+const dice1El = document.getElementById('dice1');
+const dice2El = document.getElementById('dice2');
+const rollSummary = document.getElementById('rollSummary');
 
-const createNameEl = document.getElementById("createName");
-const createGameNameEl = document.getElementById("createGameName");
-const createRoundsEl = document.getElementById("createRounds");
-const createIntervalEl = document.getElementById("createInterval");
-const createBtn = document.getElementById("createBtn");
+const startGameBtn = document.getElementById('startGameBtn');
+const bankBtn = document.getElementById('bankBtn');
+const restartBtn = document.getElementById('restartBtn');
+const gameMessage = document.getElementById('gameMessage');
 
-const joinCodeEl = document.getElementById("joinCode");
-const joinNameEl = document.getElementById("joinName");
-const joinBtn = document.getElementById("joinBtn");
+// Audio elements
+const diceRollSound = document.getElementById('diceRollSound');
+const doubleSound = document.getElementById('doubleSound');
+const bustSound = document.getElementById('bustSound');
+const bankSound = document.getElementById('bankSound');
 
-const gameCodeEl = document.getElementById("gameCode");
-const roundInfoEl = document.getElementById("roundInfo");
-const statusEl = document.getElementById("status");
-const nextRollTimerEl = document.getElementById("nextRollTimer");
-const bankTotalEl = document.getElementById("bankTotal");
-const die1El = document.getElementById("die1");
-const die2El = document.getElementById("die2");
-const lastSumEl = document.getElementById("lastSum");
-const lastRollInfoEl = document.getElementById("lastRollInfo");
-const playersListEl = document.getElementById("playersList");
-const playerCountEl = document.getElementById("playerCount");
-const startBtn = document.getElementById("startBtn");
-const bankBtn = document.getElementById("bankBtn");
-const gameMessagesEl = document.getElementById("gameMessages");
+// Local state
+let currentGameName = null;
+let currentPlayerName = null;
+let isHost = false;
+let countdownInterval = null;
+let lastRollSecondsToNext = null;
 
-// --------- Session helpers (PER TAB via sessionStorage) ---------
-
-function saveSession() {
-  if (!currentGame || !myPlayerId || !mySecret) return;
-  const data = {
-    gameCode: currentGame.code, // internal normalized ID
-    playerId: myPlayerId,
-    secret: mySecret,
-  };
-  sessionStorage.setItem("bank_session", JSON.stringify(data));
+function showLobby() {
+  gameSection.classList.add('hidden');
+  lobbySection.classList.remove('hidden');
 }
 
-function loadSession() {
-  try {
-    const raw = sessionStorage.getItem("bank_session");
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
+function showGame() {
+  lobbySection.classList.add('hidden');
+  gameSection.classList.remove('hidden');
+}
+
+function safePlay(audioEl) {
+  if (!audioEl) return;
+  const p = audioEl.play();
+  if (p && typeof p.catch === 'function') {
+    p.catch(() => {});
   }
 }
 
-// --------- UI helpers ---------
-
-function showLobbyError(msg) {
-  lobbyErrorEl.textContent = msg || "";
-}
-
-function showGameMessage(msg) {
-  const p = document.createElement("p");
-  p.textContent = msg;
-  gameMessagesEl.appendChild(p);
-  gameMessagesEl.scrollTop = gameMessagesEl.scrollHeight;
-}
-
-function switchToGame() {
-  lobbyEl.classList.add("hidden");
-  gameEl.classList.remove("hidden");
-  headerGameCodePill.hidden = false;
-}
-
-function resetCountdown() {
-  if (countdownTimer) {
-    clearInterval(countdownTimer);
-    countdownTimer = null;
+// Update phase visual styling
+function updatePhaseVisual(phase) {
+  phaseLabel.textContent = phase;
+  if (phase <= 1) {
+    phaseBadge.textContent = 'Phase 1 · Safe Rolls';
+    phaseBadge.classList.remove('phase-danger');
+    phaseBadge.classList.add('phase-safe');
+  } else {
+    phaseBadge.textContent = 'Danger Zone · 7 erases the pot!';
+    phaseBadge.classList.remove('phase-safe');
+    phaseBadge.classList.add('phase-danger');
   }
-  nextRollTimestamp = null;
-  nextRollTimerEl.textContent = "—";
 }
 
-function startCountdown() {
-  if (!rollIntervalMs || rollIntervalMs <= 0) {
-    resetCountdown();
+// Countdown timer between rolls (visual only)
+function startCountdown(seconds) {
+  if (!seconds) {
+    timerLabel.textContent = '—';
     return;
   }
-  if (!nextRollTimestamp) {
-    nextRollTimestamp = Date.now() + rollIntervalMs;
-  }
 
-  if (countdownTimer) clearInterval(countdownTimer);
+  if (countdownInterval) clearInterval(countdownInterval);
 
-  countdownTimer = setInterval(() => {
-    if (!nextRollTimestamp) {
-      nextRollTimerEl.textContent = "—";
-      return;
-    }
-    const remaining = nextRollTimestamp - Date.now();
+  let remaining = seconds;
+  timerLabel.textContent = `${remaining}s`;
+
+  countdownInterval = setInterval(() => {
+    remaining -= 1;
     if (remaining <= 0) {
-      nextRollTimerEl.textContent = "Rolling…";
-      return;
-    }
-    const seconds = remaining / 1000;
-    nextRollTimerEl.textContent = seconds.toFixed(1) + "s";
-  }, 100);
-}
-
-// --------- Main UI update ---------
-
-function updateUI(game) {
-  currentGame = game;
-  if (!game) return;
-
-  rollIntervalMs = game.rollIntervalMs;
-
-  const displayName = game.displayName || game.code;
-
-  headerGameCodeEl.textContent = displayName;
-  gameCodeEl.textContent = displayName;
-
-  roundInfoEl.textContent = `${Math.min(
-    game.roundsCompleted + 1,
-    game.roundsTotal
-  )} / ${game.roundsTotal}`;
-  statusEl.textContent = game.status;
-  bankTotalEl.textContent = game.bankTotal;
-
-  // Player count
-  playerCountEl.textContent = `${game.players.length} players`;
-
-  // Sort players by score desc for leaderboard
-  const sortedPlayers = [...game.players].sort((a, b) => b.score - a.score);
-
-  playersListEl.innerHTML = "";
-  sortedPlayers.forEach((p, idx) => {
-    const li = document.createElement("li");
-    li.className = "player-row";
-
-    const isMe = p.id === myPlayerId;
-    const leaderScore = sortedPlayers[0]?.score ?? 0;
-    const isLeader = leaderScore > 0 && p.score === leaderScore;
-
-    if (isMe) li.classList.add("me");
-    else if (isLeader) li.classList.add("leader");
-
-    // rank
-    const rankSpan = document.createElement("span");
-    rankSpan.textContent = idx + 1;
-
-    // name + badges
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "player-name-cell";
-    const nameText = document.createElement("span");
-    nameText.textContent = p.name;
-    nameSpan.appendChild(nameText);
-
-    if (isMe) {
-      const meBadge = document.createElement("span");
-      meBadge.className = "badge me";
-      meBadge.textContent = "You";
-      nameSpan.appendChild(meBadge);
-    }
-
-    if (p.isBanker) {
-      const bankerBadge = document.createElement("span");
-      bankerBadge.className = "badge banker";
-      bankerBadge.textContent = "Banker";
-      nameSpan.appendChild(bankerBadge);
-    }
-
-    if (p.hasBankedThisRound) {
-      const bankedBadge = document.createElement("span");
-      bankedBadge.className = "badge banked";
-      bankedBadge.textContent = "BANKed";
-      nameSpan.appendChild(bankedBadge);
-    }
-
-    if (!p.isConnected) {
-      const offlineBadge = document.createElement("span");
-      offlineBadge.className = "badge offline";
-      offlineBadge.textContent = "Offline";
-      nameSpan.appendChild(offlineBadge);
-    }
-
-    // score
-    const scoreSpan = document.createElement("span");
-    scoreSpan.textContent = p.score;
-
-    // round status
-    const roundSpan = document.createElement("span");
-    if (game.status === "in_round") {
-      if (p.hasBankedThisRound) {
-        roundSpan.textContent = "Done";
-      } else {
-        roundSpan.textContent = "Playing";
-      }
-    } else if (game.status === "finished") {
-      roundSpan.textContent = "Final";
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+      timerLabel.textContent = 'Rolling…';
     } else {
-      roundSpan.textContent = "Waiting";
+      timerLabel.textContent = `${remaining}s`;
     }
-
-    li.appendChild(rankSpan);
-    li.appendChild(nameSpan);
-    li.appendChild(scoreSpan);
-    li.appendChild(roundSpan);
-
-    playersListEl.appendChild(li);
-  });
-
-  const me = game.players.find((p) => p.id === myPlayerId);
-
-  // Start button only visible to banker in lobby
-  if (me && me.isBanker && game.status === "lobby") {
-    startBtn.classList.remove("hidden");
-  } else {
-    startBtn.classList.add("hidden");
-  }
-
-  // Bank button: enabled only if in_round and I haven't banked
-  if (game.status === "in_round" && me && !me.hasBankedThisRound) {
-    bankBtn.disabled = false;
-  } else {
-    bankBtn.disabled = true;
-  }
-
-  // Countdown: only when in_round
-  if (game.status === "in_round") {
-    if (!nextRollTimestamp) {
-      // Kick off a new countdown if we don't know the next timestamp yet
-      nextRollTimestamp = Date.now() + rollIntervalMs;
-    }
-    startCountdown();
-  } else {
-    resetCountdown();
-  }
+  }, 1000);
 }
 
-// --------- Socket setup ---------
+// Render players list
+function renderPlayers(players, currentRollerName) {
+  playersList.innerHTML = '';
 
-function connectSocket() {
-  socket = io(); // connects to same origin
+  players.forEach(player => {
+    const row = document.createElement('div');
+    row.className = 'player-row';
 
-  socket.on("connect", () => {
-    console.log("Connected to server", socket.id);
-    const session = loadSession();
-    if (session) {
-      socket.emit("reconnect_player", session, (res) => {
-        if (res.ok) {
-          currentGame = res.game;
-          myPlayerId = session.playerId;
-          mySecret = session.secret;
-          switchToGame();
-          updateUI(res.game);
-          showGameMessage("Reconnected to game.");
-        } else {
-          sessionStorage.removeItem("bank_session");
-        }
-      });
-    }
-  });
-
-  socket.on("game_state", (payload) => {
-    updateUI(payload);
-  });
-
-  socket.on("roll", (payload) => {
-    const { d1, d2, sum, isDoubles, bankTotal, currentRollIndex } = payload;
-    die1El.textContent = d1;
-    die2El.textContent = d2;
-    lastSumEl.textContent = sum;
-    bankTotalEl.textContent = bankTotal;
-
-    // Reset countdown from now
-    if (rollIntervalMs) {
-      nextRollTimestamp = Date.now() + rollIntervalMs;
-      startCountdown();
+    if (player.name === currentRollerName) {
+      row.classList.add('player-current');
     }
 
-    let info = `Roll #${currentRollIndex}: ${d1} + ${d2} = ${sum}`;
-    if (sum === 7 && currentRollIndex <= 3) {
-      info += " → 7 on first 3 rolls: +70!";
-    } else if (sum === 7) {
-      info += " → Round ends on 7!";
-    } else if (isDoubles && currentRollIndex <= 3) {
-      info += " → Doubles (face value added).";
-    } else if (isDoubles) {
-      info += " → Doubles (BANK doubled!).";
+    const nameEl = document.createElement('div');
+    nameEl.className = 'player-name';
+    nameEl.textContent = player.name;
+
+    const scoreEl = document.createElement('div');
+    scoreEl.className = 'player-score';
+    scoreEl.textContent = player.score;
+
+    const statusEl = document.createElement('div');
+    if (player.hasBanked) {
+      statusEl.className = 'player-banked-tag';
+      statusEl.textContent = 'BANKED';
     }
-    lastRollInfoEl.textContent = info;
-  });
 
-  socket.on("round_ended", ({ reason, game }) => {
-    updateUI(game);
-    resetCountdown();
-    if (reason === "seven_after_three") {
-      showGameMessage("Round ended: 7 rolled.");
-    } else if (reason === "all_banked") {
-      showGameMessage("Round ended: everyone has BANKed.");
-    } else {
-      showGameMessage("Round ended.");
-    }
-  });
+    row.appendChild(nameEl);
+    row.appendChild(scoreEl);
+    row.appendChild(statusEl);
 
-  socket.on("game_ended", ({ game }) => {
-    updateUI(game);
-    resetCountdown();
-    showGameMessage("Game finished! Final scores locked in.");
-  });
-
-  socket.on("error", (payload) => {
-    showGameMessage("Error: " + payload.message);
-  });
-
-  socket.on("disconnect", () => {
-    showGameMessage("Disconnected from server. Attempting to reconnect…");
+    playersList.appendChild(row);
   });
 }
 
-// --------- Button handlers ---------
-
-createBtn.addEventListener("click", () => {
-  showLobbyError("");
-  const name = createNameEl.value.trim() || "Player";
-  const gameName = createGameNameEl.value.trim() || "BANK GAME";
-  const roundsTotal = parseInt(createRoundsEl.value, 10);
-  const rollIntervalMsVal = parseInt(createIntervalEl.value, 10);
-
-  socket.emit(
-    "create_game",
-    { playerName: name, gameName, roundsTotal, rollIntervalMs: rollIntervalMsVal },
-    (res) => {
-      if (!res.ok) {
-        if (res.error === "game_name_taken") {
-          showLobbyError("That game name is already in use. Pick another.");
-        } else {
-          showLobbyError("Could not create game: " + res.error);
-        }
-        return;
-      }
-      currentGame = res.game;
-      myPlayerId = res.playerId;
-      mySecret = res.secret;
-      rollIntervalMs = res.game.rollIntervalMs;
-      saveSession();
-      switchToGame();
-      updateUI(res.game);
-      showGameMessage("Game created. Share name: " + res.game.displayName);
-    }
-  );
-});
-
-joinBtn.addEventListener("click", () => {
-  showLobbyError("");
-  const code = joinCodeEl.value.trim();
-  const name = joinNameEl.value.trim() || "Player";
-
-  if (!code) {
-    showLobbyError("Enter a game name.");
+// Control Start Game button visibility
+function updateStartButtonVisibility(state) {
+  if (!isHost) {
+    startGameBtn.classList.add('hidden');
     return;
   }
 
-  socket.emit("join_game", { gameCode: code, playerName: name }, (res) => {
-    if (!res.ok) {
-      let msg = "Could not join game.";
-      if (res.error === "game_not_found") msg = "Game not found.";
-      if (res.error === "game_full") msg = "Game is full (max 24 players).";
-      if (res.error === "game_already_started")
-        msg = "Game already started.";
-      if (res.error === "missing_game_name")
-        msg = "Enter a game name.";
-      showLobbyError(msg);
-      return;
-    }
-    currentGame = res.game;
-    myPlayerId = res.playerId;
-    mySecret = res.secret;
-    rollIntervalMs = res.game.rollIntervalMs;
-    saveSession();
-    switchToGame();
-    updateUI(res.game);
-    showGameMessage("Joined game " + res.game.displayName);
-  });
+  // Show Start Game only before any rolls have happened (rollNumber === 0)
+  if (state.rollNumber === 0 && state.round === 1) {
+    startGameBtn.classList.remove('hidden');
+  } else {
+    startGameBtn.classList.add('hidden');
+  }
+}
+
+// --- Socket event handlers ---
+
+socket.on('joined_game', ({ gameName, isHost: hostFlag }) => {
+  currentGameName = gameName;
+  isHost = hostFlag;
+  gameNameLabel.textContent = gameName;
+  lobbyError.textContent = '';
+  showGame();
+
+  restartBtn.classList.add('hidden');
+  // Start button visibility will be updated when we receive game_state
 });
 
-startBtn.addEventListener("click", () => {
-  if (!currentGame || !myPlayerId) return;
-  socket.emit(
-    "start_game",
-    { gameCode: currentGame.code, playerId: myPlayerId },
-    (res) => {
-      if (!res.ok) {
-        showGameMessage("Cannot start game: " + res.error);
-        return;
-      }
-      currentGame = res.game;
-      rollIntervalMs = res.game.rollIntervalMs;
-      updateUI(res.game);
-      showGameMessage("Game started!");
-    }
-  );
+socket.on('game_state', (state) => {
+  if (!state || state.gameName !== currentGameName) return;
+
+  roundLabel.textContent = state.round;
+  totalRoundsLabel.textContent = state.totalRounds;
+  potValue.textContent = state.pot;
+  updatePhaseVisual(state.phase || 1);
+
+  renderPlayers(state.players, null);
+  updateStartButtonVisibility(state);
 });
 
-bankBtn.addEventListener("click", () => {
-  if (!currentGame || !myPlayerId) return;
-  socket.emit(
-    "bank",
-    { gameCode: currentGame.code, playerId: myPlayerId },
-    (res) => {
-      if (!res || !res.ok) {
-        showGameMessage("BANK failed.");
-        return;
-      }
-      showGameMessage("You BANKed this round!");
+socket.on('roll_result', (roll) => {
+  if (!roll || roll.gameName !== currentGameName) return;
+
+  dice1El.textContent = roll.dice1;
+  dice2El.textContent = roll.dice2;
+  potValue.textContent = roll.pot;
+  rollerLabel.textContent = roll.rollerName || '—';
+  updatePhaseVisual(roll.phase);
+
+  let summaryText = `${roll.rollerName} rolled ${roll.dice1} + ${roll.dice2} = ${roll.sum}. `;
+  if (roll.phase <= 1) {
+    summaryText += 'Phase 1 (safe). ';
+    if (roll.isSeven) {
+      summaryText += '7 counts as 70 points!';
+    } else if (roll.isDouble) {
+      summaryText += 'Doubles add face value only.';
+    } else {
+      summaryText += 'Pot increases by the roll.';
     }
-  );
+  } else {
+    summaryText += 'Danger Zone! ';
+    if (roll.isSeven) {
+      summaryText += '7 rolled — pot crashes to 0!';
+    } else if (roll.isDouble) {
+      summaryText += 'Doubles the pot!';
+    } else {
+      summaryText += 'Pot increases by the roll.';
+    }
+  }
+
+  rollSummary.textContent = summaryText;
+
+  if (roll.players) {
+    renderPlayers(roll.players, roll.rollerName);
+  }
+
+  lastRollSecondsToNext = roll.secondsToNextRoll || null;
+  startCountdown(lastRollSecondsToNext);
+
+  // Rolls are happening – make sure Start Game is hidden
+  startGameBtn.classList.add('hidden');
+
+  // Play sounds
+  if (roll.phase === 2 && roll.isSeven) {
+    safePlay(bustSound);
+  } else if (roll.isDouble) {
+    safePlay(doubleSound);
+  } else {
+    safePlay(diceRollSound);
+  }
 });
 
-document.addEventListener("DOMContentLoaded", () => {
-  connectSocket();
+socket.on('player_banked', (data) => {
+  if (!data) return;
+  gameMessage.textContent = `${data.name} BANKED ${data.pot} points!`;
+  safePlay(bankSound);
+  setTimeout(() => {
+    if (gameMessage.textContent.startsWith(data.name)) {
+      gameMessage.textContent = '';
+    }
+  }, 3000);
 });
+
+socket.on('round_ended', ({ round, reason, pot }) => {
+  let msg;
+  if (reason === 'seven') {
+    msg = `Round ${round} ended: someone rolled a 7 in the Danger Zone. Pot crashed to 0.`;
+  } else {
+    msg = `Round ${round} ended: everyone banked or sat out.`;
+  }
+  gameMessage.textContent = msg;
+  timerLabel.textContent = '—';
+});
+
+socket.on('game_over', ({ players }) => {
+  const sorted = [...players].sort((a, b) => b.score - a.score);
+  const winner = sorted[0];
+  const lines = sorted.map((p, idx) => `${idx + 1}. ${p.name}: ${p.score}`);
+
+  gameMessage.innerHTML = `<span class="game-over">Game over!</span> Winner: ${winner.name} with ${winner.score} points.<br>${lines.join('<br>')}`;
+
+  restartBtn.classList.remove('hidden');
+  startGameBtn.classList.add('hidden');
+});
+
+socket.on('error_message', (msg) => {
+  lobbyError.textContent = msg;
+});
+
+// --- Button handlers ---
+
+createGameBtn.addEventListener('click', () => {
+  const playerName = playerNameInput.value.trim();
+  const gameName = gameNameInput.value.trim();
+  const totalRounds = parseInt(roundsSelect.value, 10) || 20;
+  const rollInterval = parseInt(intervalSelect.value, 10) || 5;
+
+  if (!playerName || !gameName) {
+    lobbyError.textContent = 'Please enter both your name and a game name.';
+    return;
+  }
+
+  currentPlayerName = playerName;
+  socket.emit('create_game', { gameName, playerName, totalRounds, rollInterval });
+});
+
+joinGameBtn.addEventListener('click', () => {
+  const playerName = playerNameInput.value.trim();
+  const gameName = gameNameInput.value.trim();
+
+  if (!playerName || !gameName) {
+    lobbyError.textContent = 'Please enter both your name and a game name.';
+    return;
+  }
+
+  currentPlayerName = playerName;
+  socket.emit('join_game', { gameName, playerName });
+});
+
+startGameBtn.addEventListener('click', () => {
+  if (!isHost || !currentGameName) return;
+  gameMessage.textContent = '';
+  rollSummary.textContent = 'Waiting for first roll…';
+  dice1El.textContent = '–';
+  dice2El.textContent = '–';
+  socket.emit('start_game', { gameName: currentGameName });
+  startGameBtn.classList.add('hidden');
+});
+
+restartBtn.addEventListener('click', () => {
+  if (!isHost || !currentGameName) return;
+  gameMessage.textContent = '';
+  rollSummary.textContent = 'Waiting for first roll…';
+  dice1El.textContent = '–';
+  dice2El.textContent = '–';
+  socket.emit('start_game', { gameName: currentGameName });
+  restartBtn.classList.add('hidden');
+});
+
+bankBtn.addEventListener('click', () => {
+  if (!currentGameName || !currentPlayerName) return;
+  socket.emit('bank', { gameName: currentGameName, playerName: currentPlayerName });
+  safePlay(bankSound);
+});
+
+// On first load, show lobby
+showLobby();

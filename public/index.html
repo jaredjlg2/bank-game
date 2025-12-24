@@ -2,163 +2,132 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>BANK Game</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BANK Dice Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="app-header">
-      <div class="brand">
-        <div class="logo-circle">B</div>
-        <div class="brand-text">
-          <h1>BANK</h1>
-          <p>Risk the pot. Call BANK. Beat your friends.</p>
-        </div>
-      </div>
-      <div class="header-right">
-        <div class="pill" id="headerGameCodePill" hidden>
-          Game: <span id="headerGameCode"></span>
-        </div>
-      </div>
+      <h1>BANK 🎲</h1>
+      <p class="tagline">Race to bank the pot before it busts.</p>
     </header>
 
     <!-- LOBBY -->
-    <main id="lobby" class="view">
-      <section class="card card-wide">
-        <h2>Start a Game</h2>
-        <div class="grid-two">
-          <div class="card-sub">
-            <h3>Create Game</h3>
-            <label>
-              Your name
-              <input id="createName" placeholder="Holly, Eric, etc." />
-            </label>
-            <label>
-              Game name
-              <input id="createGameName" placeholder="Family Night" />
-            </label>
-            <div class="grid-two-tight">
-              <label>
-                Rounds
-                <select id="createRounds">
-                  <option value="10">10 rounds</option>
-                  <option value="15">15 rounds</option>
-                  <option value="20" selected>20 rounds</option>
-                </select>
-              </label>
-              <label>
-                Roll every
-                <select id="createInterval">
-                  <option value="3000">3 seconds</option>
-                  <option value="5000" selected>5 seconds</option>
-                  <option value="7000">7 seconds</option>
-                  <option value="10000">10 seconds</option>
-                </select>
-              </label>
-            </div>
-            <button id="createBtn" class="btn-primary">Create Game</button>
+    <section id="lobby" class="card">
+      <h2>Join or Create a Game</h2>
+
+      <div class="form-row">
+        <label for="playerName">Your Name</label>
+        <input id="playerName" type="text" placeholder="Enter your name" />
+      </div>
+
+      <div class="form-row">
+        <label for="gameName">Game Name</label>
+        <input id="gameName" type="text" placeholder="FamilyNight, YouthGroup..." />
+      </div>
+
+      <div class="form-row">
+        <label for="roundsSelect">Rounds</label>
+        <select id="roundsSelect">
+          <option value="10">10 Rounds</option>
+          <option value="15">15 Rounds</option>
+          <option value="20" selected>20 Rounds</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label for="intervalSelect">Seconds Between Rolls</label>
+        <select id="intervalSelect">
+          <option value="3">3 seconds</option>
+          <option value="5" selected>5 seconds</option>
+          <option value="7">7 seconds</option>
+          <option value="10">10 seconds</option>
+        </select>
+      </div>
+
+      <div class="button-row">
+        <button id="createGameBtn" class="primary">Create Game</button>
+        <button id="joinGameBtn" class="secondary">Join Existing Game</button>
+      </div>
+
+      <p id="lobbyError" class="error-msg"></p>
+    </section>
+
+    <!-- GAME -->
+    <section id="game" class="game-layout hidden">
+      <div class="top-row">
+        <div class="card pot-card" id="potCard">
+          <div class="card-header">
+            <span class="card-title">BANK Pot</span>
           </div>
+          <div class="pot-value" id="potValue">0</div>
+          <div class="phase-badge phase-safe" id="phaseBadge">Phase 1 · Safe Rolls</div>
+        </div>
 
-          <div class="card-sub">
-            <h3>Join Existing Game</h3>
-            <label>
-              Game name
-              <input id="joinCode" placeholder="Family Night" />
-            </label>
-            <label>
-              Your name
-              <input id="joinName" placeholder="Your name" />
-            </label>
-            <button id="joinBtn" class="btn-secondary">Join Game</button>
+        <div class="card status-card">
+          <div class="status-line">
+            <span class="label">Game:</span>
+            <span id="gameNameLabel"></span>
+          </div>
+          <div class="status-line">
+            <span class="label">Round:</span>
+            <span id="roundLabel">1</span>
+            <span>/</span>
+            <span id="totalRoundsLabel">20</span>
+          </div>
+          <div class="status-line">
+            <span class="label">Phase:</span>
+            <span id="phaseLabel">1</span>
+          </div>
+          <div class="status-line">
+            <span class="label">Next Roll In:</span>
+            <span id="timerLabel">—</span>
+          </div>
+          <div class="status-line">
+            <span class="label">Roller:</span>
+            <span id="rollerLabel">—</span>
           </div>
         </div>
-        <p id="lobbyError" class="error-text"></p>
-        <p class="hint">
-          Tip: One person creates the game and reads out the game name.
-          Everyone else joins with that name on their phone or laptop.
-        </p>
-      </section>
-    </main>
+      </div>
 
-    <!-- GAME VIEW -->
-    <main id="game" class="view hidden">
-      <section class="status-bar">
-        <div class="status-item">
-          <span class="label">Game</span>
-          <span class="value code-pill" id="gameCode"></span>
-        </div>
-        <div class="status-item">
-          <span class="label">Round</span>
-          <span class="value" id="roundInfo"></span>
-        </div>
-        <div class="status-item">
-          <span class="label">Status</span>
-          <span class="value" id="status"></span>
-        </div>
-        <div class="status-item">
-          <span class="label">Next roll in</span>
-          <span class="value" id="nextRollTimer">—</span>
-        </div>
-      </section>
-
-      <section class="game-layout">
-        <!-- Left: Bank + Dice -->
-        <div class="card bank-card">
-          <h2>Bank Pot</h2>
-          <div class="bank-pot-circle">
-            <span class="bank-label">BANK</span>
-            <span class="bank-amount" id="bankTotal">0</span>
-            <span class="bank-sub">points this round</span>
-          </div>
-
-          <div class="dice-row">
-            <div class="dice-box">
-              <div class="dice-label">Die 1</div>
-              <div class="dice-value" id="die1">–</div>
-            </div>
-            <div class="dice-box">
-              <div class="dice-label">Die 2</div>
-              <div class="dice-value" id="die2">–</div>
-            </div>
-            <div class="dice-box sum">
-              <div class="dice-label">Total</div>
-              <div class="dice-value" id="lastSum">–</div>
-            </div>
-          </div>
-
-          <p id="lastRollInfo" class="roll-info">Waiting for first roll…</p>
-        </div>
-
-        <!-- Right: Players / Scores -->
+      <div class="mid-row">
         <div class="card players-card">
-          <div class="players-header">
-            <h2>Leaderboard</h2>
-            <span id="playerCount" class="player-count-pill"></span>
+          <div class="card-header">
+            <span class="card-title">Players</span>
           </div>
-          <div class="players-list-header">
-            <span>#</span>
-            <span>Player</span>
-            <span>Score</span>
-            <span>Round</span>
-          </div>
-          <ul id="playersList" class="players-list"></ul>
+          <div id="playersList" class="players-list"></div>
         </div>
-      </section>
 
-      <section class="controls-bar">
-        <button id="startBtn" class="btn-primary hidden">Start Game</button>
-        <button id="bankBtn" class="btn-bank" disabled>Bank It</button>
-      </section>
+        <div class="card dice-card">
+          <div class="card-header">
+            <span class="card-title">Last Roll</span>
+          </div>
+          <div class="dice-display">
+            <div class="dice" id="dice1">–</div>
+            <div class="dice" id="dice2">–</div>
+          </div>
+          <div class="roll-summary" id="rollSummary">Waiting for first roll…</div>
+        </div>
+      </div>
 
-      <section class="log-card">
-        <h3>Game Log</h3>
-        <div id="gameMessages" class="log-body"></div>
-      </section>
-    </main>
+      <div class="bottom-row">
+        <button id="startGameBtn" class="secondary hidden">Start Game</button>
+        <button id="bankBtn" class="primary bank-btn">BANK IT</button>
+        <button id="restartBtn" class="secondary hidden">New Game</button>
+      </div>
+
+      <p id="gameMessage" class="game-message"></p>
+    </section>
   </div>
 
+  <!-- Audio -->
+  <audio id="diceRollSound" src="dice-roll.mp3" preload="auto"></audio>
+  <audio id="doubleSound" src="double.mp3" preload="auto"></audio>
+  <audio id="bustSound" src="bust.mp3" preload="auto"></audio>
+  <audio id="bankSound" src="bank.mp3" preload="auto"></audio>
+
+  <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
 </body>
 </html>
