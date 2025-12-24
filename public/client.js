@@ -258,7 +258,7 @@ socket.on('roll_result', (roll) => {
       potCard.classList.remove('pot-bust');
       potBustTimeout = null;
     }, 3000);
-  } else if (roll.isDouble) {
+  } else if (roll.phase === 2 && roll.isDouble) {
     safePlay(doubleSound);
     potCard.classList.remove('pot-bust');
     triggerDoubleFlash();
