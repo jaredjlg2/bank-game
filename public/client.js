@@ -27,6 +27,7 @@ const playersList = document.getElementById('playersList');
 const dice1El = document.getElementById('dice1');
 const dice2El = document.getElementById('dice2');
 const rollSummary = document.getElementById('rollSummary');
+const diceCard = document.querySelector('.dice-card');
 
 const startGameBtn = document.getElementById('startGameBtn');
 const bankBtn = document.getElementById('bankBtn');
@@ -46,6 +47,27 @@ let isHost = false;
 let countdownInterval = null;
 let lastRollSecondsToNext = null;
 let potBustTimeout = null;
+let doubleFlashTimeout = null;
+
+function triggerDoubleFlash() {
+  if (!diceCard) return;
+  diceCard.classList.remove('double-flash');
+  rollSummary.classList.remove('double-text');
+
+  void diceCard.offsetWidth;
+  diceCard.classList.add('double-flash');
+  rollSummary.classList.add('double-text');
+
+  if (doubleFlashTimeout) {
+    clearTimeout(doubleFlashTimeout);
+  }
+
+  doubleFlashTimeout = setTimeout(() => {
+    diceCard.classList.remove('double-flash');
+    rollSummary.classList.remove('double-text');
+    doubleFlashTimeout = null;
+  }, 2600);
+}
 
 function showLobby() {
   gameSection.classList.add('hidden');
@@ -198,7 +220,7 @@ socket.on('roll_result', (roll) => {
     if (roll.isSeven) {
       summaryText += '7 counts as 70 points!';
     } else if (roll.isDouble) {
-      summaryText += 'Doubles add face value only.';
+      summaryText = `DOUBLE! ${summaryText}Doubles add face value only.`;
     } else {
       summaryText += 'Pot increases by the roll.';
     }
@@ -207,7 +229,7 @@ socket.on('roll_result', (roll) => {
     if (roll.isSeven) {
       summaryText += '7 rolled — pot crashes to 0!';
     } else if (roll.isDouble) {
-      summaryText += 'Doubles the pot!';
+      summaryText = `DOUBLE! ${summaryText}Doubles the pot!`;
     } else {
       summaryText += 'Pot increases by the roll.';
     }
@@ -239,9 +261,14 @@ socket.on('roll_result', (roll) => {
   } else if (roll.isDouble) {
     safePlay(doubleSound);
     potCard.classList.remove('pot-bust');
+    triggerDoubleFlash();
   } else {
     safePlay(diceRollSound);
     potCard.classList.remove('pot-bust');
+    rollSummary.classList.remove('double-text');
+    if (diceCard) {
+      diceCard.classList.remove('double-flash');
+    }
   }
 });
 
