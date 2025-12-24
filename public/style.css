@@ -214,6 +214,26 @@ button:active {
   box-shadow: 0 0 16px rgba(248, 113, 113, 0.55);
 }
 
+.pot-bust {
+  border-color: rgba(248, 113, 113, 0.9);
+  box-shadow: 0 0 30px rgba(248, 113, 113, 0.5);
+  animation: pot-bust-pulse 0.5s ease-in-out 4;
+}
+
+.pot-bust .pot-value {
+  color: #fecaca;
+}
+
+@keyframes pot-bust-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
 /* Status card */
 
 .status-line {

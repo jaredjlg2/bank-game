@@ -55,35 +55,53 @@ function endRound(gameName, reason) {
     game.timer = null;
   }
   game.rolling = false;
+  if (game.nextRoundTimer) {
+    clearTimeout(game.nextRoundTimer);
+    game.nextRoundTimer = null;
+  }
+
+  const nextRoundDelay = reason === 'seven' ? 3 : 0;
 
   io.to(gameName).emit('round_ended', {
     round: game.round,
     reason, // 'seven' or 'all_banked'
-    pot: game.pot
+    pot: game.pot,
+    nextRoundDelay
   });
 
-  game.round += 1;
+  const advanceRound = () => {
+    game.round += 1;
 
-  if (game.round > game.totalRounds) {
-    // Game over
-    const finalPlayers = [...game.players].sort((a, b) => b.score - a.score);
-    io.to(gameName).emit('game_over', {
-      gameName,
-      players: finalPlayers.map(p => ({
-        name: p.name,
-        score: p.score
-      }))
-    });
-    return;
+    if (game.round > game.totalRounds) {
+      // Game over
+      const finalPlayers = [...game.players].sort((a, b) => b.score - a.score);
+      io.to(gameName).emit('game_over', {
+        gameName,
+        players: finalPlayers.map(p => ({
+          name: p.name,
+          score: p.score
+        }))
+      });
+      return;
+    }
+
+    // Reset for next round
+    game.pot = 0;
+    game.rollNumber = 0;
+    game.players.forEach(p => { p.hasBanked = false; });
+
+    broadcastGameState(gameName);
+    startRolling(gameName);
+  };
+
+  if (nextRoundDelay > 0) {
+    game.nextRoundTimer = setTimeout(() => {
+      game.nextRoundTimer = null;
+      advanceRound();
+    }, nextRoundDelay * 1000);
+  } else {
+    advanceRound();
   }
-
-  // Reset for next round
-  game.pot = 0;
-  game.rollNumber = 0;
-  game.players.forEach(p => { p.hasBanked = false; });
-
-  broadcastGameState(gameName);
-  startRolling(gameName);
 }
 
 function performRoll(gameName) {
@@ -203,6 +221,7 @@ io.on('connection', (socket) => {
       rollerIndex: 0,
       rolling: false,
       timer: null,
+      nextRoundTimer: null,
       players: [{
         id: socket.id,
         name: playerName,
@@ -254,6 +273,10 @@ io.on('connection', (socket) => {
     game.pot = 0;
     game.rollNumber = 0;
     game.rollerIndex = 0;
+    if (game.nextRoundTimer) {
+      clearTimeout(game.nextRoundTimer);
+      game.nextRoundTimer = null;
+    }
     game.players.forEach(p => {
       p.score = 0;
       p.hasBanked = false;
