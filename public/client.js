@@ -16,6 +16,7 @@ const gameNameLabel = document.getElementById('gameNameLabel');
 const roundLabel = document.getElementById('roundLabel');
 const totalRoundsLabel = document.getElementById('totalRoundsLabel');
 const phaseLabel = document.getElementById('phaseLabel');
+const rollCounterLabel = document.getElementById('rollCounterLabel');
 const potValue = document.getElementById('potValue');
 const phaseBadge = document.getElementById('phaseBadge');
 const potCard = document.getElementById('potCard');
@@ -44,6 +45,7 @@ let currentPlayerName = null;
 let isHost = false;
 let countdownInterval = null;
 let lastRollSecondsToNext = null;
+let potBustTimeout = null;
 
 function showLobby() {
   gameSection.classList.add('hidden');
@@ -75,6 +77,10 @@ function updatePhaseVisual(phase) {
     phaseBadge.classList.remove('phase-safe');
     phaseBadge.classList.add('phase-danger');
   }
+}
+
+function updateRollCounter(rollNumber) {
+  rollCounterLabel.textContent = rollNumber > 0 ? `#${rollNumber}` : '—';
 }
 
 // Countdown timer between rolls (visual only)
@@ -170,6 +176,7 @@ socket.on('game_state', (state) => {
   totalRoundsLabel.textContent = state.totalRounds;
   potValue.textContent = state.pot;
   updatePhaseVisual(state.phase || 1);
+  updateRollCounter(state.rollNumber || 0);
 
   renderPlayers(state.players, null);
   updateStartButtonVisibility(state);
@@ -183,6 +190,7 @@ socket.on('roll_result', (roll) => {
   potValue.textContent = roll.pot;
   rollerLabel.textContent = roll.rollerName || '—';
   updatePhaseVisual(roll.phase);
+  updateRollCounter(roll.rollNumber || 0);
 
   let summaryText = `${roll.rollerName} rolled ${roll.dice1} + ${roll.dice2} = ${roll.sum}. `;
   if (roll.phase <= 1) {
@@ -220,10 +228,20 @@ socket.on('roll_result', (roll) => {
   // Play sounds
   if (roll.phase === 2 && roll.isSeven) {
     safePlay(bustSound);
+    potCard.classList.add('pot-bust');
+    if (potBustTimeout) {
+      clearTimeout(potBustTimeout);
+    }
+    potBustTimeout = setTimeout(() => {
+      potCard.classList.remove('pot-bust');
+      potBustTimeout = null;
+    }, 3000);
   } else if (roll.isDouble) {
     safePlay(doubleSound);
+    potCard.classList.remove('pot-bust');
   } else {
     safePlay(diceRollSound);
+    potCard.classList.remove('pot-bust');
   }
 });
 
@@ -238,7 +256,7 @@ socket.on('player_banked', (data) => {
   }, 3000);
 });
 
-socket.on('round_ended', ({ round, reason, pot }) => {
+socket.on('round_ended', ({ round, reason, pot, nextRoundDelay }) => {
   let msg;
   if (reason === 'seven') {
     msg = `Round ${round} ended: someone rolled a 7 in the Danger Zone. Pot crashed to 0.`;
@@ -246,7 +264,11 @@ socket.on('round_ended', ({ round, reason, pot }) => {
     msg = `Round ${round} ended: everyone banked or sat out.`;
   }
   gameMessage.textContent = msg;
-  timerLabel.textContent = '—';
+  if (nextRoundDelay) {
+    startCountdown(nextRoundDelay);
+  } else {
+    timerLabel.textContent = '—';
+  }
 });
 
 socket.on('game_over', ({ players }) => {
@@ -300,6 +322,7 @@ startGameBtn.addEventListener('click', () => {
   rollSummary.textContent = 'Waiting for first roll…';
   dice1El.textContent = '–';
   dice2El.textContent = '–';
+  updateRollCounter(0);
   socket.emit('start_game', { gameName: currentGameName });
   startGameBtn.classList.add('hidden');
 });
@@ -310,6 +333,7 @@ restartBtn.addEventListener('click', () => {
   rollSummary.textContent = 'Waiting for first roll…';
   dice1El.textContent = '–';
   dice2El.textContent = '–';
+  updateRollCounter(0);
   socket.emit('start_game', { gameName: currentGameName });
   restartBtn.classList.add('hidden');
 });
