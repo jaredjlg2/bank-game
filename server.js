@@ -13,6 +13,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // In-memory game storage
 const games = {}; 
+const highScores = [];
 // games[gameName] = {
 //   hostId,
 //   totalRounds,
@@ -95,6 +96,8 @@ function endRound(gameName, reason) {
           score: p.score
         }))
       });
+      updateHighScores(finalPlayers);
+      emitHighScores();
       return;
     }
 
@@ -216,8 +219,27 @@ function startRolling(gameName) {
   performRoll(gameName);
 }
 
+function updateHighScores(players) {
+  players.forEach(player => {
+    highScores.push({ name: player.name, score: player.score });
+  });
+
+  highScores.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.name.localeCompare(b.name);
+  });
+
+  highScores.splice(5);
+}
+
+function emitHighScores(target = io) {
+  target.emit('high_scores', { scores: highScores });
+}
+
 io.on('connection', (socket) => {
   console.log('Client connected', socket.id);
+
+  emitHighScores(socket);
 
   socket.on('create_game', ({ gameName, playerName, totalRounds, rollInterval }) => {
     if (!gameName || !playerName) return;

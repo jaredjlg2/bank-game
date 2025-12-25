@@ -9,6 +9,8 @@ const intervalSelect = document.getElementById('intervalSelect');
 const createGameBtn = document.getElementById('createGameBtn');
 const joinGameBtn = document.getElementById('joinGameBtn');
 const lobbyError = document.getElementById('lobbyError');
+const highScoresList = document.getElementById('highScoresList');
+const highScoresEmpty = document.getElementById('highScoresEmpty');
 
 // Game elements
 const gameSection = document.getElementById('game');
@@ -52,6 +54,8 @@ let doubleFlashTimeout = null;
 let diceRollAnimationTimeout = null;
 let diceRollInterval = null;
 let isGameComplete = false;
+let startGamePending = false;
+let startGamePendingTimeout = null;
 
 function triggerDoubleFlash() {
   if (!diceCard) return;
@@ -127,10 +131,17 @@ function resetGameUI() {
   updateRollCounter(0);
   playersList.innerHTML = '';
   startGameBtn.classList.add('hidden');
+  startGameBtn.disabled = false;
+  startGameBtn.textContent = 'Start Game';
   restartBtn.classList.add('hidden');
   endGameBtn.classList.add('hidden');
   bankBtn.disabled = false;
   isGameComplete = false;
+  startGamePending = false;
+  if (startGamePendingTimeout) {
+    clearTimeout(startGamePendingTimeout);
+    startGamePendingTimeout = null;
+  }
 }
 
 function safePlay(audioEl) {
@@ -237,6 +248,54 @@ function updateStartButtonVisibility(state) {
   }
 }
 
+function markStartGamePending() {
+  startGamePending = true;
+  startGameBtn.disabled = true;
+  startGameBtn.textContent = 'Starting…';
+
+  if (startGamePendingTimeout) {
+    clearTimeout(startGamePendingTimeout);
+  }
+
+  startGamePendingTimeout = setTimeout(() => {
+    if (!startGamePending) return;
+    startGamePending = false;
+    startGameBtn.disabled = false;
+    startGameBtn.textContent = 'Start Game';
+    gameMessage.textContent = 'No rolls yet. Tap Start Game to try again.';
+    startGamePendingTimeout = null;
+  }, 8000);
+}
+
+function clearStartGamePending() {
+  if (!startGamePending) return;
+  startGamePending = false;
+  startGameBtn.disabled = false;
+  startGameBtn.textContent = 'Start Game';
+  if (startGamePendingTimeout) {
+    clearTimeout(startGamePendingTimeout);
+    startGamePendingTimeout = null;
+  }
+}
+
+function renderHighScores(scores) {
+  if (!highScoresList || !highScoresEmpty) return;
+  highScoresList.innerHTML = '';
+
+  if (!scores || scores.length === 0) {
+    highScoresEmpty.classList.remove('hidden');
+    return;
+  }
+
+  highScoresEmpty.classList.add('hidden');
+  scores.forEach((entry, index) => {
+    const row = document.createElement('li');
+    row.className = 'high-score-row';
+    row.innerHTML = `<span class="high-score-rank">#${index + 1}</span><span class="high-score-name">${entry.name}</span><span class="high-score-value">${entry.score}</span>`;
+    highScoresList.appendChild(row);
+  });
+}
+
 // --- Socket event handlers ---
 
 socket.on('joined_game', ({ gameName, isHost: hostFlag }) => {
@@ -269,12 +328,17 @@ socket.on('game_state', (state) => {
 
   renderPlayers(state.players, null);
   updateStartButtonVisibility(state);
+
+  if (state.rollNumber > 0) {
+    clearStartGamePending();
+  }
 });
 
 socket.on('roll_result', (roll) => {
   if (!roll || roll.gameName !== currentGameName) return;
 
   stopDiceRolling();
+  clearStartGamePending();
   dice1El.textContent = roll.dice1;
   dice2El.textContent = roll.dice2;
   potValue.textContent = roll.pot;
@@ -372,6 +436,7 @@ socket.on('round_ended', ({ round, reason, pot, nextRoundDelay }) => {
 
 socket.on('game_over', ({ players }) => {
   stopDiceRolling();
+  clearStartGamePending();
   const sorted = [...players].sort((a, b) => b.score - a.score);
   const winner = sorted[0];
   const lines = sorted.map((p, idx) => `${idx + 1}. ${p.name}: ${p.score}`);
@@ -391,6 +456,10 @@ socket.on('game_ended', () => {
   currentPlayerName = null;
   isHost = false;
   showLobby();
+});
+
+socket.on('high_scores', ({ scores }) => {
+  renderHighScores(scores);
 });
 
 socket.on('error_message', (msg) => {
@@ -436,7 +505,7 @@ startGameBtn.addEventListener('click', () => {
   dice2El.textContent = '–';
   updateRollCounter(0);
   socket.emit('start_game', { gameName: currentGameName });
-  startGameBtn.classList.add('hidden');
+  markStartGamePending();
   endGameBtn.classList.add('hidden');
   bankBtn.disabled = false;
 });
