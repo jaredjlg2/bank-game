@@ -514,12 +514,33 @@ button:active {
     font-size: 2rem;
   }
 
-  .top-row {
-    flex-direction: column;
+  .top-row,
+  .mid-row {
+    display: contents;
   }
 
-  .mid-row {
-    grid-template-columns: 1fr;
+  .pot-card {
+    order: 1;
+  }
+
+  .dice-card {
+    order: 2;
+  }
+
+  .bottom-row {
+    order: 3;
+  }
+
+  .status-card {
+    order: 4;
+  }
+
+  .players-card {
+    order: 5;
+  }
+
+  .game-message {
+    order: 6;
   }
 
   .players-card {
