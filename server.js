@@ -30,6 +30,11 @@ function broadcastGameState(gameName) {
   const game = games[gameName];
   if (!game) return;
 
+  const leaderboard = [...game.players].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.name.localeCompare(b.name);
+  });
+
   io.to(gameName).emit('game_state', {
     gameName,
     totalRounds: game.totalRounds,
@@ -38,7 +43,7 @@ function broadcastGameState(gameName) {
     pot: game.pot,
     rollNumber: game.rollNumber,
     phase: game.rollNumber <= 3 ? 1 : 2,
-    players: game.players.map(p => ({
+    players: leaderboard.map(p => ({
       name: p.name,
       score: p.score,
       hasBanked: p.hasBanked
@@ -82,6 +87,7 @@ function endRound(gameName, reason) {
           score: p.score
         }))
       });
+      delete games[gameName];
       return;
     }
 
@@ -170,7 +176,10 @@ function performRoll(gameName) {
     pot: game.pot,
     rollerName: roller.name,
     secondsToNextRoll: game.rollInterval,
-    players: game.players.map(p => ({
+    players: [...game.players].sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.name.localeCompare(b.name);
+    }).map(p => ({
       name: p.name,
       score: p.score,
       hasBanked: p.hasBanked
