@@ -63,6 +63,71 @@ body {
   margin-bottom: 1rem;
 }
 
+.lobby-highscores {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.highscores-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.highscores-header h3 {
+  font-size: 1.1rem;
+}
+
+.highscores-subtitle {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.highscores-empty {
+  font-size: 0.9rem;
+  color: #9ca3af;
+}
+
+.highscores-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-left: 0;
+}
+
+.high-score-row {
+  display: grid;
+  grid-template-columns: 0.6fr 1.6fr 0.8fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(2, 6, 23, 0.6);
+}
+
+.high-score-rank {
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.high-score-name {
+  font-weight: 600;
+}
+
+.high-score-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .form-row {
   display: flex;
   flex-direction: column;
