@@ -48,6 +48,8 @@ let countdownInterval = null;
 let lastRollSecondsToNext = null;
 let potBustTimeout = null;
 let doubleFlashTimeout = null;
+let diceRollAnimationTimeout = null;
+let diceRollInterval = null;
 
 function triggerDoubleFlash() {
   if (!diceCard) return;
@@ -67,6 +69,37 @@ function triggerDoubleFlash() {
     rollSummary.classList.remove('double-text');
     doubleFlashTimeout = null;
   }, 2600);
+}
+
+function beginDiceRolling() {
+  if (!diceCard || diceRollInterval) return;
+  diceCard.classList.add('dice-rolling');
+  diceRollInterval = setInterval(() => {
+    dice1El.textContent = Math.floor(Math.random() * 6) + 1;
+    dice2El.textContent = Math.floor(Math.random() * 6) + 1;
+  }, 140);
+}
+
+function stopDiceRolling() {
+  if (diceRollAnimationTimeout) {
+    clearTimeout(diceRollAnimationTimeout);
+    diceRollAnimationTimeout = null;
+  }
+  if (diceRollInterval) {
+    clearInterval(diceRollInterval);
+    diceRollInterval = null;
+  }
+  if (diceCard) {
+    diceCard.classList.remove('dice-rolling');
+  }
+}
+
+function scheduleDiceRolling(secondsToNextRoll) {
+  stopDiceRolling();
+  if (!secondsToNextRoll) return;
+  const leadTimeSeconds = 2.5;
+  const delaySeconds = Math.max(secondsToNextRoll - leadTimeSeconds, 0);
+  diceRollAnimationTimeout = setTimeout(beginDiceRolling, delaySeconds * 1000);
 }
 
 function showLobby() {
@@ -133,7 +166,12 @@ function startCountdown(seconds) {
 function renderPlayers(players, currentRollerName) {
   playersList.innerHTML = '';
 
-  players.forEach(player => {
+  const sortedPlayers = [...players].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.name.localeCompare(b.name);
+  });
+
+  sortedPlayers.forEach(player => {
     const row = document.createElement('div');
     row.className = 'player-row';
 
@@ -207,6 +245,7 @@ socket.on('game_state', (state) => {
 socket.on('roll_result', (roll) => {
   if (!roll || roll.gameName !== currentGameName) return;
 
+  stopDiceRolling();
   dice1El.textContent = roll.dice1;
   dice2El.textContent = roll.dice2;
   potValue.textContent = roll.pot;
@@ -243,6 +282,7 @@ socket.on('roll_result', (roll) => {
 
   lastRollSecondsToNext = roll.secondsToNextRoll || null;
   startCountdown(lastRollSecondsToNext);
+  scheduleDiceRolling(lastRollSecondsToNext);
 
   // Rolls are happening – make sure Start Game is hidden
   startGameBtn.classList.add('hidden');
@@ -284,6 +324,7 @@ socket.on('player_banked', (data) => {
 });
 
 socket.on('round_ended', ({ round, reason, pot, nextRoundDelay }) => {
+  stopDiceRolling();
   let msg;
   if (reason === 'seven') {
     msg = `Round ${round} ended: someone rolled a 7 in the Danger Zone. Pot crashed to 0.`;
@@ -299,6 +340,7 @@ socket.on('round_ended', ({ round, reason, pot, nextRoundDelay }) => {
 });
 
 socket.on('game_over', ({ players }) => {
+  stopDiceRolling();
   const sorted = [...players].sort((a, b) => b.score - a.score);
   const winner = sorted[0];
   const lines = sorted.map((p, idx) => `${idx + 1}. ${p.name}: ${p.score}`);
@@ -345,6 +387,7 @@ joinGameBtn.addEventListener('click', () => {
 
 startGameBtn.addEventListener('click', () => {
   if (!isHost || !currentGameName) return;
+  stopDiceRolling();
   gameMessage.textContent = '';
   rollSummary.textContent = 'Waiting for first roll…';
   dice1El.textContent = '–';
@@ -356,6 +399,7 @@ startGameBtn.addEventListener('click', () => {
 
 restartBtn.addEventListener('click', () => {
   if (!isHost || !currentGameName) return;
+  stopDiceRolling();
   gameMessage.textContent = '';
   rollSummary.textContent = 'Waiting for first roll…';
   dice1El.textContent = '–';
