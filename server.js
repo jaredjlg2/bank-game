@@ -23,6 +23,7 @@ const games = {};
 //   rolling,
 //   timer,
 //   rollerIndex,
+//   isComplete,
 //   players: [{ id, name, score, hasBanked }]
 // };
 
@@ -43,6 +44,7 @@ function broadcastGameState(gameName) {
     pot: game.pot,
     rollNumber: game.rollNumber,
     phase: game.rollNumber <= 3 ? 1 : 2,
+    isComplete: game.isComplete,
     players: leaderboard.map(p => ({
       name: p.name,
       score: p.score,
@@ -80,6 +82,12 @@ function endRound(gameName, reason) {
     if (game.round > game.totalRounds) {
       // Game over
       const finalPlayers = [...game.players].sort((a, b) => b.score - a.score);
+      game.isComplete = true;
+      game.rolling = false;
+      game.timer = null;
+      game.nextRoundTimer = null;
+      game.round = game.totalRounds;
+      game.rollNumber = 0;
       io.to(gameName).emit('game_over', {
         gameName,
         players: finalPlayers.map(p => ({
@@ -87,7 +95,6 @@ function endRound(gameName, reason) {
           score: p.score
         }))
       });
-      delete games[gameName];
       return;
     }
 
@@ -231,6 +238,7 @@ io.on('connection', (socket) => {
       rolling: false,
       timer: null,
       nextRoundTimer: null,
+      isComplete: false,
       players: [{
         id: socket.id,
         name: playerName,
@@ -270,6 +278,17 @@ io.on('connection', (socket) => {
 
     socket.emit('joined_game', { gameName, isHost: socket.id === game.hostId });
     broadcastGameState(gameName);
+
+    if (game.isComplete) {
+      const finalPlayers = [...game.players].sort((a, b) => b.score - a.score);
+      socket.emit('game_over', {
+        gameName,
+        players: finalPlayers.map(p => ({
+          name: p.name,
+          score: p.score
+        }))
+      });
+    }
   });
 
   socket.on('start_game', ({ gameName }) => {
@@ -282,6 +301,7 @@ io.on('connection', (socket) => {
     game.pot = 0;
     game.rollNumber = 0;
     game.rollerIndex = 0;
+    game.isComplete = false;
     if (game.nextRoundTimer) {
       clearTimeout(game.nextRoundTimer);
       game.nextRoundTimer = null;
@@ -298,6 +318,7 @@ io.on('connection', (socket) => {
   socket.on('bank', ({ gameName, playerName }) => {
     const game = games[gameName];
     if (!game) return;
+    if (game.isComplete) return;
 
     const player = game.players.find(p => p.name === playerName);
     if (!player || player.hasBanked) return;
@@ -322,6 +343,25 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Client disconnected', socket.id);
     // Leaving state in memory lets players refresh / reconnect.
+  });
+
+  socket.on('end_game', ({ gameName }) => {
+    const game = games[gameName];
+    if (!game) return;
+    if (!socket.rooms.has(gameName)) return;
+
+    if (game.timer) {
+      clearInterval(game.timer);
+      game.timer = null;
+    }
+    if (game.nextRoundTimer) {
+      clearTimeout(game.nextRoundTimer);
+      game.nextRoundTimer = null;
+    }
+    game.rolling = false;
+
+    io.to(gameName).emit('game_ended');
+    delete games[gameName];
   });
 });
 

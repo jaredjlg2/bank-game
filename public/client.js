@@ -32,6 +32,7 @@ const diceCard = document.querySelector('.dice-card');
 const startGameBtn = document.getElementById('startGameBtn');
 const bankBtn = document.getElementById('bankBtn');
 const restartBtn = document.getElementById('restartBtn');
+const endGameBtn = document.getElementById('endGameBtn');
 const gameMessage = document.getElementById('gameMessage');
 
 // Audio elements
@@ -50,6 +51,7 @@ let potBustTimeout = null;
 let doubleFlashTimeout = null;
 let diceRollAnimationTimeout = null;
 let diceRollInterval = null;
+let isGameComplete = false;
 
 function triggerDoubleFlash() {
   if (!diceCard) return;
@@ -110,6 +112,25 @@ function showLobby() {
 function showGame() {
   lobbySection.classList.add('hidden');
   gameSection.classList.remove('hidden');
+}
+
+function resetGameUI() {
+  stopDiceRolling();
+  gameMessage.textContent = '';
+  rollSummary.textContent = 'Waiting for first roll…';
+  dice1El.textContent = '–';
+  dice2El.textContent = '–';
+  potValue.textContent = '0';
+  rollerLabel.textContent = '—';
+  timerLabel.textContent = '—';
+  updatePhaseVisual(1);
+  updateRollCounter(0);
+  playersList.innerHTML = '';
+  startGameBtn.classList.add('hidden');
+  restartBtn.classList.add('hidden');
+  endGameBtn.classList.add('hidden');
+  bankBtn.disabled = false;
+  isGameComplete = false;
 }
 
 function safePlay(audioEl) {
@@ -209,7 +230,7 @@ function updateStartButtonVisibility(state) {
   }
 
   // Show Start Game only before any rolls have happened (rollNumber === 0)
-  if (state.rollNumber === 0 && state.round === 1) {
+  if (state.rollNumber === 0 && state.round === 1 && !state.isComplete) {
     startGameBtn.classList.remove('hidden');
   } else {
     startGameBtn.classList.add('hidden');
@@ -226,6 +247,7 @@ socket.on('joined_game', ({ gameName, isHost: hostFlag }) => {
   showGame();
 
   restartBtn.classList.add('hidden');
+  endGameBtn.classList.add('hidden');
   // Start button visibility will be updated when we receive game_state
 });
 
@@ -237,6 +259,13 @@ socket.on('game_state', (state) => {
   potValue.textContent = state.pot;
   updatePhaseVisual(state.phase || 1);
   updateRollCounter(state.rollNumber || 0);
+  isGameComplete = Boolean(state.isComplete);
+  bankBtn.disabled = isGameComplete;
+  if (isGameComplete) {
+    endGameBtn.classList.remove('hidden');
+  } else {
+    endGameBtn.classList.add('hidden');
+  }
 
   renderPlayers(state.players, null);
   updateStartButtonVisibility(state);
@@ -286,6 +315,8 @@ socket.on('roll_result', (roll) => {
 
   // Rolls are happening – make sure Start Game is hidden
   startGameBtn.classList.add('hidden');
+  endGameBtn.classList.add('hidden');
+  bankBtn.disabled = false;
 
   // Play sounds
   if (roll.phase === 2 && roll.isSeven) {
@@ -347,8 +378,19 @@ socket.on('game_over', ({ players }) => {
 
   gameMessage.innerHTML = `<span class="game-over">Game over!</span> Winner: ${winner.name} with ${winner.score} points.<br>${lines.join('<br>')}`;
 
-  restartBtn.classList.remove('hidden');
   startGameBtn.classList.add('hidden');
+  restartBtn.classList.toggle('hidden', !isHost);
+  endGameBtn.classList.remove('hidden');
+  bankBtn.disabled = true;
+  isGameComplete = true;
+});
+
+socket.on('game_ended', () => {
+  resetGameUI();
+  currentGameName = null;
+  currentPlayerName = null;
+  isHost = false;
+  showLobby();
 });
 
 socket.on('error_message', (msg) => {
@@ -395,6 +437,8 @@ startGameBtn.addEventListener('click', () => {
   updateRollCounter(0);
   socket.emit('start_game', { gameName: currentGameName });
   startGameBtn.classList.add('hidden');
+  endGameBtn.classList.add('hidden');
+  bankBtn.disabled = false;
 });
 
 restartBtn.addEventListener('click', () => {
@@ -407,12 +451,19 @@ restartBtn.addEventListener('click', () => {
   updateRollCounter(0);
   socket.emit('start_game', { gameName: currentGameName });
   restartBtn.classList.add('hidden');
+  endGameBtn.classList.add('hidden');
+  bankBtn.disabled = false;
 });
 
 bankBtn.addEventListener('click', () => {
   if (!currentGameName || !currentPlayerName) return;
   socket.emit('bank', { gameName: currentGameName, playerName: currentPlayerName });
   safePlay(bankSound);
+});
+
+endGameBtn.addEventListener('click', () => {
+  if (!currentGameName) return;
+  socket.emit('end_game', { gameName: currentGameName });
 });
 
 // On first load, show lobby
