@@ -261,6 +261,7 @@ io.on('connection', (socket) => {
       timer: null,
       nextRoundTimer: null,
       isComplete: false,
+      groupMuted: false,
       players: [{
         id: socket.id,
         name: playerName,
@@ -272,7 +273,7 @@ io.on('connection', (socket) => {
     games[gameName] = newGame;
     socket.join(gameName);
 
-    socket.emit('joined_game', { gameName, isHost: true });
+    socket.emit('joined_game', { gameName, isHost: true, groupMuted: newGame.groupMuted });
     socket.to(gameName).emit('voice_peer_joined', { id: socket.id });
     broadcastGameState(gameName);
   });
@@ -299,7 +300,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    socket.emit('joined_game', { gameName, isHost: socket.id === game.hostId });
+    socket.emit('joined_game', { gameName, isHost: socket.id === game.hostId, groupMuted: game.groupMuted });
     socket.to(gameName).emit('voice_peer_joined', { id: socket.id });
     broadcastGameState(gameName);
 
@@ -337,6 +338,14 @@ io.on('connection', (socket) => {
 
     broadcastGameState(gameName);
     startRolling(gameName);
+  });
+
+  socket.on('toggle_group_mute', ({ gameName }) => {
+    const game = games[gameName];
+    if (!game) return;
+    if (socket.id !== game.hostId) return;
+    game.groupMuted = !game.groupMuted;
+    io.to(gameName).emit('voice_group_muted', { muted: game.groupMuted });
   });
 
   socket.on('bank', ({ gameName, playerName }) => {
