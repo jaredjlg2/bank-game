@@ -489,6 +489,54 @@ button:active {
   font-size: 1.05rem;
 }
 
+.voice-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.voice-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.push-to-talk {
+  min-width: 160px;
+}
+
+.push-to-talk.ptt-active {
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  color: #0c4a6e;
+  border: none;
+  box-shadow: 0 10px 20px rgba(14, 165, 233, 0.4);
+}
+
+.push-to-talk:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.voice-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+  color: #e5e7eb;
+}
+
+.voice-hint {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.remote-audio {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .game-message {
   margin-top: 0.75rem;
   text-align: center;
@@ -539,8 +587,12 @@ button:active {
     order: 5;
   }
 
-  .game-message {
+  .voice-card {
     order: 6;
+  }
+
+  .game-message {
+    order: 7;
   }
 
   .players-card {

@@ -131,6 +131,20 @@
         <button id="endGameBtn" class="secondary hidden">End Game</button>
       </div>
 
+      <div class="card voice-card">
+        <div class="card-header">
+          <span class="card-title">Voice Chat</span>
+        </div>
+        <div class="voice-controls">
+          <button id="pushToTalkBtn" class="secondary push-to-talk" disabled>Hold to Talk</button>
+          <div class="voice-status">
+            <span id="voiceStatus">Join a game to enable voice chat.</span>
+            <span id="voiceHint" class="voice-hint">Hold Space or press and hold the button to talk.</span>
+          </div>
+        </div>
+        <div id="remoteAudio" class="remote-audio"></div>
+      </div>
+
       <p id="gameMessage" class="game-message"></p>
     </section>
   </div>
