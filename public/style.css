@@ -504,6 +504,10 @@ button:active {
 
 .push-to-talk {
   min-width: 160px;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
 }
 
 .push-to-talk.ptt-active {
