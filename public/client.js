@@ -806,6 +806,9 @@ if (pushToTalkBtn) {
   });
   pushToTalkBtn.addEventListener('pointerleave', handlePushToTalkEnd);
   pushToTalkBtn.addEventListener('pointercancel', handlePushToTalkEnd);
+  pushToTalkBtn.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+  });
 }
 
 document.addEventListener('keydown', (event) => {
