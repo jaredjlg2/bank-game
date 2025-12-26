@@ -37,6 +37,7 @@ const restartBtn = document.getElementById('restartBtn');
 const endGameBtn = document.getElementById('endGameBtn');
 const gameMessage = document.getElementById('gameMessage');
 const pushToTalkBtn = document.getElementById('pushToTalkBtn');
+const groupMuteBtn = document.getElementById('groupMuteBtn');
 const voiceStatus = document.getElementById('voiceStatus');
 const voiceHint = document.getElementById('voiceHint');
 const remoteAudio = document.getElementById('remoteAudio');
@@ -64,6 +65,7 @@ let localStream = null;
 let localAudioTrack = null;
 let peerConnections = new Map();
 let isPushToTalkActive = false;
+let isGroupMuted = false;
 
 const rtcConfig = {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -75,6 +77,18 @@ function updateVoiceStatus(message) {
   }
 }
 
+function updatePushToTalkLabel() {
+  if (!pushToTalkBtn) return;
+  pushToTalkBtn.textContent = isPushToTalkActive ? 'Mic On' : 'Mic Off';
+  pushToTalkBtn.setAttribute('aria-pressed', String(isPushToTalkActive));
+}
+
+function updateGroupMuteUI() {
+  if (!groupMuteBtn) return;
+  groupMuteBtn.classList.toggle('hidden', !isHost);
+  groupMuteBtn.textContent = isGroupMuted ? 'Unmute Group' : 'Mute Group';
+}
+
 function setPushToTalkState(isActive) {
   if (!localAudioTrack) return;
   localAudioTrack.enabled = isActive;
@@ -82,12 +96,37 @@ function setPushToTalkState(isActive) {
   if (pushToTalkBtn) {
     pushToTalkBtn.classList.toggle('ptt-active', isActive);
   }
+  updatePushToTalkLabel();
   updateVoiceStatus(isActive ? 'Talking…' : 'Mic muted');
 }
 
 function stopPushToTalk() {
   if (isPushToTalkActive) {
     setPushToTalkState(false);
+  }
+}
+
+function applyGroupMuteState(muted) {
+  isGroupMuted = Boolean(muted);
+  updateGroupMuteUI();
+
+  if (isGroupMuted && !isHost) {
+    stopPushToTalk();
+    if (pushToTalkBtn) {
+      pushToTalkBtn.disabled = true;
+    }
+    updateVoiceStatus('Group muted by host.');
+    return;
+  }
+
+  if (pushToTalkBtn) {
+    pushToTalkBtn.disabled = !currentGameName;
+  }
+
+  if (localAudioTrack) {
+    updateVoiceStatus(isPushToTalkActive ? 'Talking…' : 'Mic muted');
+  } else {
+    updateVoiceStatus('Tap the mic button to enable your mic.');
   }
 }
 
@@ -204,9 +243,9 @@ async function ensureLocalAudio() {
       localAudioTrack.enabled = false;
     }
 
-    updateVoiceStatus('Mic ready. Hold to talk.');
+    updateVoiceStatus('Mic ready. Toggle to talk.');
     if (pushToTalkBtn) {
-      pushToTalkBtn.disabled = false;
+      pushToTalkBtn.disabled = !isHost && isGroupMuted;
     }
 
     peerConnections.forEach(pc => {
@@ -248,10 +287,13 @@ function resetVoiceChat() {
     pushToTalkBtn.disabled = true;
     pushToTalkBtn.classList.remove('ptt-active');
   }
+  updatePushToTalkLabel();
+  isGroupMuted = false;
+  updateGroupMuteUI();
 
   updateVoiceStatus('Join a game to enable voice chat.');
   if (voiceHint) {
-    voiceHint.textContent = 'Hold Space or press and hold the button to talk.';
+    voiceHint.textContent = 'Press Space or tap the button to toggle your mic.';
   }
   if (remoteAudio) {
     remoteAudio.innerHTML = '';
@@ -500,17 +542,19 @@ function renderHighScores(scores) {
 
 // --- Socket event handlers ---
 
-socket.on('joined_game', ({ gameName, isHost: hostFlag }) => {
+socket.on('joined_game', ({ gameName, isHost: hostFlag, groupMuted }) => {
   currentGameName = gameName;
   isHost = hostFlag;
+  isGroupMuted = Boolean(groupMuted);
   gameNameLabel.textContent = gameName;
   lobbyError.textContent = '';
   showGame();
 
   if (pushToTalkBtn) {
-    pushToTalkBtn.disabled = false;
+    pushToTalkBtn.disabled = !isHost && isGroupMuted;
   }
-  updateVoiceStatus('Hold to talk to enable your mic.');
+  updatePushToTalkLabel();
+  applyGroupMuteState(isGroupMuted);
 
   restartBtn.classList.add('hidden');
   endGameBtn.classList.add('hidden');
@@ -714,6 +758,10 @@ socket.on('voice_peer_left', ({ id }) => {
   closePeerConnection(id);
 });
 
+socket.on('voice_group_muted', ({ muted }) => {
+  applyGroupMuteState(muted);
+});
+
 // --- Button handlers ---
 
 createGameBtn.addEventListener('click', () => {
@@ -783,31 +831,32 @@ endGameBtn.addEventListener('click', () => {
   socket.emit('end_game', { gameName: currentGameName });
 });
 
-async function handlePushToTalkStart() {
+if (groupMuteBtn) {
+  groupMuteBtn.addEventListener('click', () => {
+    if (!isHost || !currentGameName) return;
+    socket.emit('toggle_group_mute', { gameName: currentGameName });
+  });
+}
+
+async function togglePushToTalk() {
   if (!currentGameName) return;
+  if (isGroupMuted && !isHost) {
+    updateVoiceStatus('Group muted by host.');
+    return;
+  }
+  if (isPushToTalkActive) {
+    setPushToTalkState(false);
+    return;
+  }
   const stream = await ensureLocalAudio();
   if (!stream || !localAudioTrack) return;
   setPushToTalkState(true);
 }
 
-function handlePushToTalkEnd() {
-  if (!localAudioTrack) return;
-  setPushToTalkState(false);
-}
-
 if (pushToTalkBtn) {
-  pushToTalkBtn.addEventListener('pointerdown', (event) => {
+  pushToTalkBtn.addEventListener('click', (event) => {
     event.preventDefault();
-    handlePushToTalkStart();
-  });
-  pushToTalkBtn.addEventListener('pointerup', (event) => {
-    event.preventDefault();
-    handlePushToTalkEnd();
-  });
-  pushToTalkBtn.addEventListener('pointerleave', handlePushToTalkEnd);
-  pushToTalkBtn.addEventListener('pointercancel', handlePushToTalkEnd);
-  pushToTalkBtn.addEventListener('contextmenu', (event) => {
-    event.preventDefault();
+    togglePushToTalk();
   });
 }
 
@@ -817,14 +866,7 @@ document.addEventListener('keydown', (event) => {
   if (target && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName)) return;
   if (gameSection.classList.contains('hidden')) return;
   event.preventDefault();
-  handlePushToTalkStart();
-});
-
-document.addEventListener('keyup', (event) => {
-  if (event.code !== 'Space') return;
-  if (gameSection.classList.contains('hidden')) return;
-  event.preventDefault();
-  handlePushToTalkEnd();
+  togglePushToTalk();
 });
 
 // On first load, show lobby

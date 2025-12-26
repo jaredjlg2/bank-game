@@ -510,6 +510,14 @@ button:active {
   touch-action: none;
 }
 
+.floating-ptt {
+  position: fixed;
+  right: calc(1.5rem + env(safe-area-inset-right));
+  bottom: calc(1.5rem + env(safe-area-inset-bottom));
+  z-index: 20;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.35);
+}
+
 .push-to-talk.ptt-active {
   background: linear-gradient(135deg, #38bdf8, #0ea5e9);
   color: #0c4a6e;
