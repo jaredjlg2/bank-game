@@ -36,6 +36,10 @@ const bankBtn = document.getElementById('bankBtn');
 const restartBtn = document.getElementById('restartBtn');
 const endGameBtn = document.getElementById('endGameBtn');
 const gameMessage = document.getElementById('gameMessage');
+const pushToTalkBtn = document.getElementById('pushToTalkBtn');
+const voiceStatus = document.getElementById('voiceStatus');
+const voiceHint = document.getElementById('voiceHint');
+const remoteAudio = document.getElementById('remoteAudio');
 
 // Audio elements
 const diceRollSound = document.getElementById('diceRollSound');
@@ -56,6 +60,203 @@ let diceRollInterval = null;
 let isGameComplete = false;
 let startGamePending = false;
 let startGamePendingTimeout = null;
+let localStream = null;
+let localAudioTrack = null;
+let peerConnections = new Map();
+let isPushToTalkActive = false;
+
+const rtcConfig = {
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+};
+
+function updateVoiceStatus(message) {
+  if (voiceStatus) {
+    voiceStatus.textContent = message;
+  }
+}
+
+function setPushToTalkState(isActive) {
+  if (!localAudioTrack) return;
+  localAudioTrack.enabled = isActive;
+  isPushToTalkActive = isActive;
+  if (pushToTalkBtn) {
+    pushToTalkBtn.classList.toggle('ptt-active', isActive);
+  }
+  updateVoiceStatus(isActive ? 'Talking…' : 'Mic muted');
+}
+
+function stopPushToTalk() {
+  if (isPushToTalkActive) {
+    setPushToTalkState(false);
+  }
+}
+
+function attachRemoteStream(peerId, stream) {
+  if (!remoteAudio) return;
+  let audioEl = document.getElementById(`remote-audio-${peerId}`);
+  if (!audioEl) {
+    audioEl = document.createElement('audio');
+    audioEl.id = `remote-audio-${peerId}`;
+    audioEl.autoplay = true;
+    audioEl.playsInline = true;
+    remoteAudio.appendChild(audioEl);
+  }
+  audioEl.srcObject = stream;
+}
+
+function removeRemoteAudio(peerId) {
+  const audioEl = document.getElementById(`remote-audio-${peerId}`);
+  if (!audioEl) return;
+  audioEl.srcObject = null;
+  audioEl.remove();
+}
+
+function createPeerConnection(peerId) {
+  if (peerConnections.has(peerId)) {
+    return peerConnections.get(peerId);
+  }
+
+  const pc = new RTCPeerConnection(rtcConfig);
+  peerConnections.set(peerId, pc);
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  } else {
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+  }
+
+  pc.onicecandidate = (event) => {
+    if (!event.candidate || !currentGameName) return;
+    socket.emit('voice_ice', {
+      gameName: currentGameName,
+      targetId: peerId,
+      candidate: event.candidate
+    });
+  };
+
+  pc.ontrack = (event) => {
+    const [stream] = event.streams;
+    if (stream) {
+      attachRemoteStream(peerId, stream);
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+      closePeerConnection(peerId);
+    }
+  };
+
+  return pc;
+}
+
+function closePeerConnection(peerId) {
+  const pc = peerConnections.get(peerId);
+  if (!pc) return;
+  pc.ontrack = null;
+  pc.onicecandidate = null;
+  pc.close();
+  peerConnections.delete(peerId);
+  removeRemoteAudio(peerId);
+}
+
+async function createAndSendOffer(peerId) {
+  if (!currentGameName) return;
+  const pc = createPeerConnection(peerId);
+  if (pc.signalingState !== 'stable') return;
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit('voice_offer', {
+    gameName: currentGameName,
+    targetId: peerId,
+    description: pc.localDescription
+  });
+}
+
+async function renegotiateAllPeers() {
+  const tasks = [];
+  peerConnections.forEach((pc, peerId) => {
+    if (pc.signalingState === 'stable') {
+      tasks.push(createAndSendOffer(peerId));
+    }
+  });
+  if (tasks.length) {
+    await Promise.allSettled(tasks);
+  }
+}
+
+async function ensureLocalAudio() {
+  if (localStream) return localStream;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+
+    localStream = stream;
+    localAudioTrack = stream.getAudioTracks()[0] || null;
+
+    if (localAudioTrack) {
+      localAudioTrack.enabled = false;
+    }
+
+    updateVoiceStatus('Mic ready. Hold to talk.');
+    if (pushToTalkBtn) {
+      pushToTalkBtn.disabled = false;
+    }
+
+    peerConnections.forEach(pc => {
+      if (!localAudioTrack) return;
+      const hasAudioSender = pc.getSenders().some(sender => sender.track && sender.track.kind === 'audio');
+      if (!hasAudioSender) {
+        pc.addTrack(localAudioTrack, localStream);
+      }
+      pc.getTransceivers().forEach(transceiver => {
+        if (transceiver.receiver.track && transceiver.receiver.track.kind === 'audio') {
+          transceiver.direction = 'sendrecv';
+        }
+      });
+    });
+
+    await renegotiateAllPeers();
+    return stream;
+  } catch (err) {
+    updateVoiceStatus('Microphone blocked. Allow mic access to talk.');
+    if (pushToTalkBtn) {
+      pushToTalkBtn.disabled = true;
+    }
+    return null;
+  }
+}
+
+function resetVoiceChat() {
+  stopPushToTalk();
+  peerConnections.forEach((_, peerId) => closePeerConnection(peerId));
+  peerConnections = new Map();
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+    localAudioTrack = null;
+  }
+
+  if (pushToTalkBtn) {
+    pushToTalkBtn.disabled = true;
+    pushToTalkBtn.classList.remove('ptt-active');
+  }
+
+  updateVoiceStatus('Join a game to enable voice chat.');
+  if (voiceHint) {
+    voiceHint.textContent = 'Hold Space or press and hold the button to talk.';
+  }
+  if (remoteAudio) {
+    remoteAudio.innerHTML = '';
+  }
+}
 
 function triggerDoubleFlash() {
   if (!diceCard) return;
@@ -142,6 +343,7 @@ function resetGameUI() {
     clearTimeout(startGamePendingTimeout);
     startGamePendingTimeout = null;
   }
+  resetVoiceChat();
 }
 
 function safePlay(audioEl) {
@@ -305,6 +507,11 @@ socket.on('joined_game', ({ gameName, isHost: hostFlag }) => {
   lobbyError.textContent = '';
   showGame();
 
+  if (pushToTalkBtn) {
+    pushToTalkBtn.disabled = false;
+  }
+  updateVoiceStatus('Hold to talk to enable your mic.');
+
   restartBtn.classList.add('hidden');
   endGameBtn.classList.add('hidden');
   // Start button visibility will be updated when we receive game_state
@@ -466,6 +673,47 @@ socket.on('error_message', (msg) => {
   lobbyError.textContent = msg;
 });
 
+socket.on('voice_peer_joined', ({ id }) => {
+  if (!id || id === socket.id) return;
+  createAndSendOffer(id).catch(() => {});
+});
+
+socket.on('voice_offer', async ({ from, description }) => {
+  if (!from || !description || !currentGameName) return;
+  const pc = createPeerConnection(from);
+  await pc.setRemoteDescription(description);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  socket.emit('voice_answer', {
+    gameName: currentGameName,
+    targetId: from,
+    description: pc.localDescription
+  });
+});
+
+socket.on('voice_answer', async ({ from, description }) => {
+  if (!from || !description) return;
+  const pc = peerConnections.get(from);
+  if (!pc) return;
+  await pc.setRemoteDescription(description);
+});
+
+socket.on('voice_ice', async ({ from, candidate }) => {
+  if (!from || !candidate) return;
+  const pc = peerConnections.get(from);
+  if (!pc) return;
+  try {
+    await pc.addIceCandidate(candidate);
+  } catch (err) {
+    // Ignore failed ICE candidates
+  }
+});
+
+socket.on('voice_peer_left', ({ id }) => {
+  if (!id) return;
+  closePeerConnection(id);
+});
+
 // --- Button handlers ---
 
 createGameBtn.addEventListener('click', () => {
@@ -533,6 +781,47 @@ bankBtn.addEventListener('click', () => {
 endGameBtn.addEventListener('click', () => {
   if (!currentGameName) return;
   socket.emit('end_game', { gameName: currentGameName });
+});
+
+async function handlePushToTalkStart() {
+  if (!currentGameName) return;
+  const stream = await ensureLocalAudio();
+  if (!stream || !localAudioTrack) return;
+  setPushToTalkState(true);
+}
+
+function handlePushToTalkEnd() {
+  if (!localAudioTrack) return;
+  setPushToTalkState(false);
+}
+
+if (pushToTalkBtn) {
+  pushToTalkBtn.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    handlePushToTalkStart();
+  });
+  pushToTalkBtn.addEventListener('pointerup', (event) => {
+    event.preventDefault();
+    handlePushToTalkEnd();
+  });
+  pushToTalkBtn.addEventListener('pointerleave', handlePushToTalkEnd);
+  pushToTalkBtn.addEventListener('pointercancel', handlePushToTalkEnd);
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.code !== 'Space' || event.repeat) return;
+  const target = event.target;
+  if (target && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName)) return;
+  if (gameSection.classList.contains('hidden')) return;
+  event.preventDefault();
+  handlePushToTalkStart();
+});
+
+document.addEventListener('keyup', (event) => {
+  if (event.code !== 'Space') return;
+  if (gameSection.classList.contains('hidden')) return;
+  event.preventDefault();
+  handlePushToTalkEnd();
 });
 
 // On first load, show lobby

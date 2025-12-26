@@ -273,6 +273,7 @@ io.on('connection', (socket) => {
     socket.join(gameName);
 
     socket.emit('joined_game', { gameName, isHost: true });
+    socket.to(gameName).emit('voice_peer_joined', { id: socket.id });
     broadcastGameState(gameName);
   });
 
@@ -299,6 +300,7 @@ io.on('connection', (socket) => {
     }
 
     socket.emit('joined_game', { gameName, isHost: socket.id === game.hostId });
+    socket.to(gameName).emit('voice_peer_joined', { id: socket.id });
     broadcastGameState(gameName);
 
     if (game.isComplete) {
@@ -365,6 +367,37 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Client disconnected', socket.id);
     // Leaving state in memory lets players refresh / reconnect.
+    const rooms = [...socket.rooms].filter(room => room !== socket.id);
+    rooms.forEach(room => {
+      socket.to(room).emit('voice_peer_left', { id: socket.id });
+    });
+  });
+
+  socket.on('voice_offer', ({ gameName, targetId, description }) => {
+    if (!gameName || !targetId || !description) return;
+    if (!socket.rooms.has(gameName)) return;
+    io.to(targetId).emit('voice_offer', {
+      from: socket.id,
+      description
+    });
+  });
+
+  socket.on('voice_answer', ({ gameName, targetId, description }) => {
+    if (!gameName || !targetId || !description) return;
+    if (!socket.rooms.has(gameName)) return;
+    io.to(targetId).emit('voice_answer', {
+      from: socket.id,
+      description
+    });
+  });
+
+  socket.on('voice_ice', ({ gameName, targetId, candidate }) => {
+    if (!gameName || !targetId || !candidate) return;
+    if (!socket.rooms.has(gameName)) return;
+    io.to(targetId).emit('voice_ice', {
+      from: socket.id,
+      candidate
+    });
   });
 
   socket.on('end_game', ({ gameName }) => {
