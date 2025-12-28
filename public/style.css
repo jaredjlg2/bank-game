@@ -162,6 +162,10 @@ body {
   margin-top: 0.75rem;
 }
 
+.button-row-centered {
+  justify-content: center;
+}
+
 button {
   cursor: pointer;
   border-radius: 999px;
@@ -191,6 +195,12 @@ button.secondary {
 
 button.secondary:hover {
   background: rgba(31, 41, 55, 0.95);
+}
+
+.icon-button {
+  padding: 0.3rem 0.65rem;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 button:active {
@@ -625,6 +635,46 @@ button:active {
   border: 1px solid rgba(148, 163, 184, 0.35);
   background: #fff;
   padding: 0.5rem;
+}
+
+/* How to play modal */
+
+.how-to-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 55;
+}
+
+.how-to-dialog {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.how-to-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+  color: #e2e8f0;
+}
+
+.how-to-content ul {
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: #cbd5f5;
+}
+
+.how-to-content strong {
+  color: #e5e7eb;
 }
 
 @media (min-width: 720px) {
