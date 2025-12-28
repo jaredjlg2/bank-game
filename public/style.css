@@ -229,6 +229,35 @@ button:active {
   flex: 1.5;
 }
 
+.share-card {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.share-text {
+  font-size: 0.9rem;
+  color: #cbd5f5;
+}
+
+.share-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.share-actions button {
+  width: 100%;
+}
+
+.share-status {
+  min-height: 1.2rem;
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -563,6 +592,52 @@ button:active {
   font-weight: 600;
 }
 
+/* QR modal */
+
+.qr-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 50;
+}
+
+.qr-dialog {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.qr-dialog .card-header {
+  width: 100%;
+}
+
+.qr-image {
+  width: 220px;
+  height: 220px;
+  align-self: center;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #fff;
+  padding: 0.5rem;
+}
+
+@media (min-width: 720px) {
+  .share-actions {
+    flex-direction: row;
+  }
+
+  .share-actions button {
+    width: auto;
+    flex: 1;
+  }
+}
+
 /* Responsive tweaks */
 
 @media (max-width: 800px) {
@@ -599,12 +674,16 @@ button:active {
     order: 5;
   }
 
-  .voice-card {
+  .share-card {
     order: 6;
   }
 
-  .game-message {
+  .voice-card {
     order: 7;
+  }
+
+  .game-message {
+    order: 8;
   }
 
   .players-card {

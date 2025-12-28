@@ -102,6 +102,18 @@
             <span id="rollerLabel">—</span>
           </div>
         </div>
+
+        <div class="card share-card">
+          <div class="card-header">
+            <span class="card-title">Share</span>
+          </div>
+          <p class="share-text">Invite everyone to this table fast.</p>
+          <div class="share-actions">
+            <button id="shareLinkBtn" class="secondary">Copy game link</button>
+            <button id="shareQrBtn" class="secondary">Show QR</button>
+          </div>
+          <p id="shareStatus" class="share-status" aria-live="polite"></p>
+        </div>
       </div>
 
       <div class="mid-row">
@@ -148,6 +160,18 @@
 
       <p id="gameMessage" class="game-message"></p>
     </section>
+  </div>
+
+  <div id="qrModal" class="qr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="qrTitle">
+    <div class="qr-dialog card">
+      <div class="card-header">
+        <span class="card-title" id="qrTitle">Scan to Join</span>
+        <button id="qrCloseBtn" class="secondary">Close</button>
+      </div>
+      <p class="share-text">Point your camera at the code to open the game link.</p>
+      <img id="qrImage" class="qr-image" alt="QR code for the game link" />
+      <p id="qrLinkLabel" class="share-status"></p>
+    </div>
   </div>
 
   <!-- Audio -->
