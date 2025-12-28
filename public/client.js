@@ -43,6 +43,10 @@ const qrModal = document.getElementById('qrModal');
 const qrImage = document.getElementById('qrImage');
 const qrCloseBtn = document.getElementById('qrCloseBtn');
 const qrLinkLabel = document.getElementById('qrLinkLabel');
+const howToPlayModal = document.getElementById('howToPlayModal');
+const howToCloseBtn = document.getElementById('howToCloseBtn');
+const howToPlayLobbyBtn = document.getElementById('howToPlayLobbyBtn');
+const howToPlayGameBtn = document.getElementById('howToPlayGameBtn');
 const pushToTalkBtn = document.getElementById('pushToTalkBtn');
 const groupMuteBtn = document.getElementById('groupMuteBtn');
 const voiceStatus = document.getElementById('voiceStatus');
@@ -488,6 +492,16 @@ function openQrModal() {
 function closeQrModal() {
   if (!qrModal) return;
   qrModal.classList.add('hidden');
+}
+
+function openHowToModal() {
+  if (!howToPlayModal) return;
+  howToPlayModal.classList.remove('hidden');
+}
+
+function closeHowToModal() {
+  if (!howToPlayModal) return;
+  howToPlayModal.classList.add('hidden');
 }
 
 // Countdown timer between rolls (visual only)
@@ -941,6 +955,32 @@ if (qrModal) {
   });
 }
 
+if (howToPlayLobbyBtn) {
+  howToPlayLobbyBtn.addEventListener('click', () => {
+    openHowToModal();
+  });
+}
+
+if (howToPlayGameBtn) {
+  howToPlayGameBtn.addEventListener('click', () => {
+    openHowToModal();
+  });
+}
+
+if (howToCloseBtn) {
+  howToCloseBtn.addEventListener('click', () => {
+    closeHowToModal();
+  });
+}
+
+if (howToPlayModal) {
+  howToPlayModal.addEventListener('click', (event) => {
+    if (event.target === howToPlayModal) {
+      closeHowToModal();
+    }
+  });
+}
+
 async function togglePushToTalk() {
   if (!currentGameName) return;
   if (isGroupMuted && !isHost) {
@@ -975,6 +1015,12 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('keydown', (event) => {
   if (event.code === 'Escape' && qrModal && !qrModal.classList.contains('hidden')) {
     closeQrModal();
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.code === 'Escape' && howToPlayModal && !howToPlayModal.classList.contains('hidden')) {
+    closeHowToModal();
   }
 });
 
