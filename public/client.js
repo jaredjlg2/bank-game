@@ -36,6 +36,13 @@ const bankBtn = document.getElementById('bankBtn');
 const restartBtn = document.getElementById('restartBtn');
 const endGameBtn = document.getElementById('endGameBtn');
 const gameMessage = document.getElementById('gameMessage');
+const shareLinkBtn = document.getElementById('shareLinkBtn');
+const shareQrBtn = document.getElementById('shareQrBtn');
+const shareStatus = document.getElementById('shareStatus');
+const qrModal = document.getElementById('qrModal');
+const qrImage = document.getElementById('qrImage');
+const qrCloseBtn = document.getElementById('qrCloseBtn');
+const qrLinkLabel = document.getElementById('qrLinkLabel');
 const pushToTalkBtn = document.getElementById('pushToTalkBtn');
 const groupMuteBtn = document.getElementById('groupMuteBtn');
 const voiceStatus = document.getElementById('voiceStatus');
@@ -354,6 +361,7 @@ function scheduleDiceRolling(secondsToNextRoll) {
 function showLobby() {
   gameSection.classList.add('hidden');
   lobbySection.classList.remove('hidden');
+  updateShareState(null);
 }
 
 function showGame() {
@@ -386,6 +394,7 @@ function resetGameUI() {
     startGamePendingTimeout = null;
   }
   resetVoiceChat();
+  updateShareState(null);
 }
 
 function safePlay(audioEl) {
@@ -412,6 +421,73 @@ function updatePhaseVisual(phase) {
 
 function updateRollCounter(rollNumber) {
   rollCounterLabel.textContent = rollNumber > 0 ? `#${rollNumber}` : '—';
+}
+
+function buildShareUrl(gameName) {
+  const baseUrl = window.location.origin || window.location.href;
+  const url = new URL(baseUrl);
+  url.searchParams.set('game', gameName);
+  return url.toString();
+}
+
+function updateShareState(gameName) {
+  const isReady = Boolean(gameName);
+  if (shareLinkBtn) {
+    shareLinkBtn.disabled = !isReady;
+  }
+  if (shareQrBtn) {
+    shareQrBtn.disabled = !isReady;
+  }
+  if (shareStatus) {
+    shareStatus.textContent = isReady ? '' : 'Join a game to share the link.';
+  }
+  if (!isReady && qrModal) {
+    qrModal.classList.add('hidden');
+  }
+}
+
+async function copyShareLink() {
+  if (!currentGameName) return;
+  const url = buildShareUrl(currentGameName);
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const tempInput = document.createElement('textarea');
+      tempInput.value = url;
+      tempInput.setAttribute('readonly', '');
+      tempInput.style.position = 'absolute';
+      tempInput.style.left = '-9999px';
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand('copy');
+      tempInput.remove();
+    }
+    if (shareStatus) {
+      shareStatus.textContent = 'Link copied to clipboard.';
+    }
+  } catch (err) {
+    if (shareStatus) {
+      shareStatus.textContent = 'Unable to copy. You can still share the QR code.';
+    }
+  }
+}
+
+function openQrModal() {
+  if (!currentGameName || !qrModal || !qrImage) return;
+  const url = buildShareUrl(currentGameName);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(url)}`;
+  qrImage.src = qrUrl;
+  qrImage.alt = `QR code for ${currentGameName}`;
+  if (qrLinkLabel) {
+    qrLinkLabel.textContent = url;
+  }
+  qrModal.classList.remove('hidden');
+}
+
+function closeQrModal() {
+  if (!qrModal) return;
+  qrModal.classList.add('hidden');
 }
 
 // Countdown timer between rolls (visual only)
@@ -549,6 +625,7 @@ socket.on('joined_game', ({ gameName, isHost: hostFlag, groupMuted }) => {
   gameNameLabel.textContent = gameName;
   lobbyError.textContent = '';
   showGame();
+  updateShareState(gameName);
 
   if (pushToTalkBtn) {
     pushToTalkBtn.disabled = !isHost && isGroupMuted;
@@ -838,6 +915,32 @@ if (groupMuteBtn) {
   });
 }
 
+if (shareLinkBtn) {
+  shareLinkBtn.addEventListener('click', () => {
+    copyShareLink();
+  });
+}
+
+if (shareQrBtn) {
+  shareQrBtn.addEventListener('click', () => {
+    openQrModal();
+  });
+}
+
+if (qrCloseBtn) {
+  qrCloseBtn.addEventListener('click', () => {
+    closeQrModal();
+  });
+}
+
+if (qrModal) {
+  qrModal.addEventListener('click', (event) => {
+    if (event.target === qrModal) {
+      closeQrModal();
+    }
+  });
+}
+
 async function togglePushToTalk() {
   if (!currentGameName) return;
   if (isGroupMuted && !isHost) {
@@ -869,5 +972,16 @@ document.addEventListener('keydown', (event) => {
   togglePushToTalk();
 });
 
+document.addEventListener('keydown', (event) => {
+  if (event.code === 'Escape' && qrModal && !qrModal.classList.contains('hidden')) {
+    closeQrModal();
+  }
+});
+
 // On first load, show lobby
+const params = new URLSearchParams(window.location.search);
+const sharedGame = params.get('game');
+if (sharedGame && gameNameInput) {
+  gameNameInput.value = sharedGame;
+}
 showLobby();
