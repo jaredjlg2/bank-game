@@ -3,7 +3,9 @@ const socket = io();
 // Lobby elements
 const lobbySection = document.getElementById('lobby');
 const playerNameInput = document.getElementById('playerName');
+const gameNameRow = document.getElementById('gameNameRow');
 const gameNameInput = document.getElementById('gameName');
+const gameModeInputs = document.querySelectorAll('input[name="gameMode"]');
 const roundsSelect = document.getElementById('roundsSelect');
 const intervalSelect = document.getElementById('intervalSelect');
 const createGameBtn = document.getElementById('createGameBtn');
@@ -81,6 +83,24 @@ let isGroupMuted = false;
 const rtcConfig = {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
 };
+
+function getSelectedGameMode() {
+  const selected = document.querySelector('input[name="gameMode"]:checked');
+  return selected ? selected.value : 'multi';
+}
+
+function updateLobbyModeUI() {
+  const isSinglePlayer = getSelectedGameMode() === 'single';
+  if (gameNameRow) {
+    gameNameRow.classList.toggle('hidden', isSinglePlayer);
+  }
+  if (joinGameBtn) {
+    joinGameBtn.classList.toggle('hidden', isSinglePlayer);
+  }
+  if (createGameBtn) {
+    createGameBtn.textContent = isSinglePlayer ? 'Start Solo Game' : 'Create Game';
+  }
+}
 
 function updateVoiceStatus(message) {
   if (voiceStatus) {
@@ -854,20 +874,38 @@ socket.on('voice_group_muted', ({ muted }) => {
 });
 
 // --- Button handlers ---
+updateLobbyModeUI();
+gameModeInputs.forEach(input => {
+  input.addEventListener('change', () => {
+    updateLobbyModeUI();
+    lobbyError.textContent = '';
+  });
+});
 
 createGameBtn.addEventListener('click', () => {
   const playerName = playerNameInput.value.trim();
+  const selectedMode = getSelectedGameMode();
   const gameName = gameNameInput.value.trim();
   const totalRounds = parseInt(roundsSelect.value, 10) || 20;
   const rollInterval = parseInt(intervalSelect.value, 10) || 5;
+  const resolvedGameName = selectedMode === 'single'
+    ? `Solo-${Date.now()}`
+    : gameName;
 
-  if (!playerName || !gameName) {
-    lobbyError.textContent = 'Please enter both your name and a game name.';
+  if (!playerName || (selectedMode !== 'single' && !gameName)) {
+    lobbyError.textContent = selectedMode === 'single'
+      ? 'Please enter your name.'
+      : 'Please enter both your name and a game name.';
     return;
   }
 
   currentPlayerName = playerName;
-  socket.emit('create_game', { gameName, playerName, totalRounds, rollInterval });
+  socket.emit('create_game', {
+    gameName: resolvedGameName,
+    playerName,
+    totalRounds,
+    rollInterval
+  });
 });
 
 joinGameBtn.addEventListener('click', () => {
