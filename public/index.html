@@ -23,6 +23,20 @@
       </div>
 
       <div class="form-row">
+        <span class="form-label">Mode</span>
+        <div class="mode-toggle" role="radiogroup" aria-label="Game mode">
+          <label class="toggle-option">
+            <input type="radio" name="gameMode" value="single" />
+            <span>Single Player</span>
+          </label>
+          <label class="toggle-option">
+            <input type="radio" name="gameMode" value="multi" checked />
+            <span>Multiplayer</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-row" id="gameNameRow">
         <label for="gameName">Game Name</label>
         <input id="gameName" type="text" placeholder="FamilyNight, YouthGroup..." />
       </div>
